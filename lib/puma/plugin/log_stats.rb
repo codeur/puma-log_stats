@@ -50,7 +50,7 @@ module LogStats
   def threshold_reached(level, threshold)
     return false if threads_load < threshold
 
-    notify_alarm("#{level.to_s.upcase}: Puma threads load is more than #{threshold * 100}% (#{pool_capacity}/#{max_threads})")
+    notify_alarm("#{level.to_s.upcase}: Puma threads load is more than #{threshold * 100}% (#{max_threads - pool_capacity}/#{max_threads})")
     @load_level = level if @load_level != level
     true
   end

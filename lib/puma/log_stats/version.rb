@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
-module PumaLogStats
-  VERSION = "0.1.0"
+module Puma
+  module LogStats
+    VERSION = "0.1.1"
+  end
 end
