@@ -63,7 +63,7 @@ module LogStats
   end
 
   def notify_alarm(message)
-    if (Time.now - @notified_at) < LogStats.alarm_notification_interval
+    if @notified_at.nil? || (Time.now - @notified_at) < LogStats.alarm_notification_interval
       log(message)
       Sentry.capture_message(message) if LogStats.alarm_on_sentry && defined?(Sentry)
       @notified_at = Time.now
