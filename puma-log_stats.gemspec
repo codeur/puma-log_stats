@@ -3,7 +3,7 @@
 require_relative "lib/puma/log_stats/version"
 
 Gem::Specification.new do |spec|
-  spec.name = "puma-log_stats"
+  spec.name = "puma-log_stats-codeur"
   spec.version = Puma::LogStats::VERSION
   spec.authors = ["Will Jordan", "Codeur SAS"]
   spec.email = ["will@code.org", "dev@codeur.com"]
