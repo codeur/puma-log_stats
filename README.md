@@ -2,13 +2,12 @@
 
 Puma plugin to log server stats whenever the number of concurrent requests exceeds a configured threshold.
 
-
 ## Installation
 
 Add this line to your application's Gemfile:
 
 ```ruby
-gem 'puma_log_stats'
+gem 'puma-log_stats'
 ```
 
 And then execute:
@@ -17,7 +16,7 @@ And then execute:
 
 Or install it yourself as:
 
-    $ gem install puma_log_stats
+    $ gem install puma-log_stats
 
 ## Usage
 
@@ -38,4 +37,4 @@ To install this gem onto your local machine, run `bundle exec rake install`. To 
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/wjordan/puma_log_stats.
+Bug reports and pull requests are welcome on GitHub at https://github.com/codeur/puma-log_stats.

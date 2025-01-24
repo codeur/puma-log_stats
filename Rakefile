@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
-require 'bundler/gem_tasks'
-require 'rake/testtask'
+require "bundler/gem_tasks"
+require "minitest/test_task"
 
-Rake::TestTask.new(:test)
+Minitest::TestTask.create
+
+require "standard/rake"
+
+task default: %i[test standard]
