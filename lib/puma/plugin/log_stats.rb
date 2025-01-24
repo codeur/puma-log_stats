@@ -7,6 +7,18 @@ module LogStats
     # Interval between logging attempts in seconds.
     attr_accessor :interval
     LogStats.interval = 10
+
+    attr_accessor :alarm_on_sentry
+    LogStats.alarm_on_sentry = true
+
+    attr_accessor :alarm_notification_interval
+    LogStats.alarm_notification_interval = 60
+
+    attr_accessor :warning_threshold
+    LogStats.warning_threshold = 0.7
+
+    attr_accessor :critical_threshold
+    LogStats.critical_threshold = 0.85
   end
 
   def start(launcher)
@@ -19,15 +31,42 @@ module LogStats
 
     in_background do
       @running = true
+      @load_level = :normal
       while @running
         sleep LogStats.interval
         @stats = Puma.stats_hash
-        log("Current directory: #{Dir.pwd}")
         log(status)
-        if pool_capacity / max_threads <= 0.2
-          log("WARNING: Puma thread pool capacity is less than 20% (#{pool_capacity}/#{max_threads})")
-        end
+        check_alarms
       end
+    end
+  end
+
+  def check_alarms
+    threshold_reached(:critical, LogStats.critical_threshold) ||
+      threshold_reached(:warning, LogStats.warning_threshold) ||
+      normal_load
+  end
+
+  def threshold_reached(level, threshold)
+    return false if threads_load < threshold
+
+    notify_alarm("#{level.to_s.upcase}: Puma threads load is more than #{threshold * 100}% (#{pool_capacity}/#{max_threads})")
+    @load_level = level if @load_level != level
+    true
+  end
+
+  def normal_load
+    return if @load_level == :normal
+
+    log("INFO: Puma threads load is back to normal values")
+    @load_level = :normal
+  end
+
+  def notify_alarm(message)
+    if (Time.now - @notified_at) < LogStats.alarm_notification_interval
+      log(message)
+      Sentry.capture_message(message) if LogStats.alarm_on_sentry && defined?(Sentry)
+      @notified_at = Time.now
     end
   end
 
@@ -41,6 +80,10 @@ module LogStats
 
   def log(str)
     @launcher.log_writer.log("[#{Time.now}][puma #{Puma::Const::VERSION}] #{str}")
+  end
+
+  def threads_load
+    1.0 - pool_capacity.to_f / max_threads.to_f
   end
 
   def clustered?
