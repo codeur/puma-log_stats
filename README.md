@@ -1,6 +1,6 @@
 # PumaLogStats
 
-Puma plugin to log server stats whenever the number of concurrent requests exceeds a configured threshold.
+Puma plugin to log server stats to puma.log. It logs changes only and can raise Sentry issues when a threshold is reached.
 
 ## Installation
 
@@ -26,7 +26,10 @@ This plugin is loaded using Puma's plugin API. To enable, add a `plugin :log_sta
 # config/puma.rb
 
 plugin :log_stats
-LogStats.threshold = 2
+# LogStats.interval = 10
+# LogStats.notify_change_with = :sentry # can be a Proc
+# LogStats.warning_threshold = 0.7
+# LogStats.critical_threshold = 0.85
 ```
 
 ## Development

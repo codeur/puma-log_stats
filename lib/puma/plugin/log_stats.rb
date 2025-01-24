@@ -8,11 +8,8 @@ module LogStats
     attr_accessor :interval
     LogStats.interval = 10
 
-    attr_accessor :alarm_on_sentry
-    LogStats.alarm_on_sentry = true
-
-    attr_accessor :alarm_notification_interval
-    LogStats.alarm_notification_interval = 60
+    attr_accessor :notify_change_with
+    LogStats.notify_change_with = :sentry
 
     attr_accessor :warning_threshold
     LogStats.warning_threshold = 0.7
@@ -34,8 +31,10 @@ module LogStats
       @load_level = :normal
       while @running
         sleep LogStats.interval
+        @previous_status_message = @status_message
         @stats = Puma.stats_hash
-        log(status)
+        @status_message = status_message
+        log(@status_message) if @previous_status_message != @status_message
         check_alarms
       end
     end
@@ -50,27 +49,31 @@ module LogStats
   def threshold_reached(level, threshold)
     return false if threads_load < threshold
 
-    notify_alarm("#{level.to_s.upcase}: Puma threads load is more than #{threshold * 100}% (#{max_threads - pool_capacity}/#{max_threads})")
-    @load_level = level if @load_level != level
+    change_level(level, "Puma threads load is greater than #{threshold * 100}% (#{max_threads - pool_capacity}/#{max_threads})")
     true
   end
 
   def normal_load
-    return if @load_level == :normal
-
-    log("INFO: Puma threads load is back to normal values")
-    @load_level = :normal
+    change_level(:normal, "Puma threads load is back to normal values")
   end
 
-  def notify_alarm(message)
-    if @notified_at.nil? || (Time.now - @notified_at) < LogStats.alarm_notification_interval
-      log(message)
-      Sentry.capture_message(message) if LogStats.alarm_on_sentry && defined?(Sentry)
-      @notified_at = Time.now
+  def change_level(level, message)
+    return if @load_level == level
+
+    log("#{level.to_s.upcase}: #{message}")
+    notify(level, message)
+    @load_level = level
+  end
+
+  def notify(level, message)
+    if LogStats.notify_change_with == :sentry
+      Sentry.capture_message(message, level: level == :critical ? :error : level) if defined?(Sentry) && level != :normal
+    elsif LogStats.notify_change_with.respond_to?(:call)
+      LogStats.notify_change_with.call(level: level, message: message, threads_load: threads_load)
     end
   end
 
-  def status
+  def status_message
     if clustered?
       "cluster: #{booted_workers}/#{workers} workers: #{running}/#{max_threads} threads, #{pool_capacity} available, #{backlog} backlog"
     else
@@ -134,105 +137,3 @@ end
 Puma::Plugin.create do
   include LogStats
 end
-
-# require "puma"
-# require "puma/plugin"
-# require "json"
-
-# # Puma plugin to log server stats whenever the number of
-# # concurrent requests exceeds a configured threshold.
-# module LogStats
-#   STAT_METHODS = %i[backlog running pool_capacity max_threads requests_count].freeze
-
-#   class << self
-#     # Minimum concurrent requests per process that will trigger logging server
-#     # stats, or nil to disable logging.
-#     # Default is the max number of threads in the server's thread pool.
-#     # If this attribute is a Proc, it will be re-evaluated each interval.
-#     attr_accessor :threshold
-#     LogStats.threshold = :max
-
-#     # Interval between logging attempts in seconds.
-#     attr_accessor :interval
-#     LogStats.interval = 1
-
-#     # Proc to filter backtraces.
-#     attr_accessor :backtrace_filter
-#     LogStats.backtrace_filter = ->(bt) { bt }
-#   end
-
-#   Puma::Plugin.create do
-#     attr_reader :launcher
-
-#     def start(launcher)
-#       @launcher = launcher
-#       launcher.events.register(:state) do |state|
-#         @state = state
-#         stats_logger_thread if state == :running
-#       end
-
-#       in_background { start }
-#     end
-
-#     private
-
-#     def stats_logger_thread
-#       Thread.new do
-#         if Thread.current.respond_to?(:name=)
-#           Thread.current.name = "puma stats logger"
-#         end
-#         start while @state == :running
-#       end
-#     end
-
-#     def start
-#       sleep LogStats.interval
-#       return unless server
-
-#       if should_log?
-#         stats = server_stats
-#         stats[:threads] = thread_backtraces
-#         stats[:gc] = GC.stat
-#         log stats.to_json
-#       end
-#     rescue => e
-#       log "LogStats failed: #{e}\n  #{e.backtrace.join("\n    ")}"
-#     end
-
-#     def log(str)
-#       launcher.log_writer.log str
-#     end
-
-#     # Save reference to Server object from the thread-local key.
-#     def server
-#       @server ||= Thread.list.map { |t| t[Puma::Server::ThreadLocalKey] }.compact.first
-#     end
-
-#     def server_stats
-#       STAT_METHODS.select(&server.method(:respond_to?))
-#         .map { |name| [name, server.send(name) || 0] }.to_h
-#     end
-
-#     # True if current server load meets configured threshold.
-#     def should_log?
-#       threshold = LogStats.threshold
-#       threshold = threshold.call if threshold.is_a?(Proc)
-#       threshold = server.max_threads if threshold == :max
-#       threshold && (server.max_threads - server.pool_capacity) >= threshold
-#     end
-
-#     def thread_backtraces
-#       worker_threads.map do |t|
-#         name = t.respond_to?(:name) ? t.name : thread.object_id.to_s(36)
-#         [name, LogStats.backtrace_filter.call(t.backtrace)]
-#       end.sort.to_h
-#     end
-
-#     # List all non-idle worker threads in the thread pool.
-#     def worker_threads
-#       server.instance_variable_get(:@thread_pool)
-#         .instance_variable_get(:@workers)
-#         .reject { |t| t.backtrace.first.match?(/thread_pool\.rb.*sleep/) }
-#     end
-#   end
-# end
